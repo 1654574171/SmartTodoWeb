@@ -83,12 +83,29 @@ function unsupported(feature: string): { ok: false; message: string } {
   return { ok: false, message };
 }
 
+/**
+ * 网页端没有原生返回键，浏览器的后退/手势返回默认会离开页面（表现为“直接退出”）。
+ * 这里放一个 history 哨兵并接管 popstate：把返回导航转成 app:back，交给 App 统一处理。
+ * App 内已有分层返回逻辑：编辑器 → 设置/日历/AI 面板 → 主界面，主界面才走 hideWindow。
+ */
+function initWebBackHandler(): void {
+  const sentinel = { smarttodoBack: true };
+  history.pushState(sentinel, '');
+  window.addEventListener('popstate', () => {
+    emit('app:back', null);
+    // 浏览器已弹出一条历史，立刻补回，保证返回始终停留在应用内、交给上面的分层逻辑。
+    history.pushState(sentinel, '');
+  });
+}
+
 export async function initWeb(): Promise<void> {
   // 界面完全沿用安卓版（大标题、左滑卡片、隐藏窗口类按钮），仅用 shell 标记区分原生能力。
   document.documentElement.dataset.platform = 'android';
   document.documentElement.dataset.shell = 'web';
   document.documentElement.classList.add('platform-android');
   document.documentElement.style.removeProperty('--status-bar-inset');
+
+  initWebBackHandler();
 
   // 默认走同源 /dav（Netlify Functions 转发）；设置里的 baseUrl 可覆盖，localStorage 兼容旧值。
   const davBase = localStorage.getItem(DAV_BASE_KEY) || '/dav';
@@ -127,7 +144,9 @@ export async function initWeb(): Promise<void> {
       return { ok: true };
     },
     async hideWindow() {
-      return unsupported('窗口隐藏');
+      // 网页版无法真正关闭窗口；分层返回走到主界面时给个明确提示，而不是“不支持”。
+      emit('toast', '已经是首页了');
+      return { ok: false };
     },
     async minimizeWindow() {
       return unsupported('窗口最小化');
