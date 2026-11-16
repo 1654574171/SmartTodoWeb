@@ -1,0 +1,20 @@
+[build]
+  command = "npm run build:site"
+  publish = "dist-site"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# 网页版同步请求 /dav/...，由函数同源转发到坚果云，避免浏览器跨域拦截。
+[[redirects]]
+  from = "/dav/*"
+  to = "/.netlify/functions/dav"
+  status = 200
+  force = true
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
