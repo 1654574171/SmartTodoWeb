@@ -2,17 +2,35 @@
   "name": "SmartTodo · 轻巧便签智能待办",
   "short_name": "SmartTodo",
   "description": "轻量便签待办、周 / 月日历与 AI 智能整理",
+  "lang": "zh-CN",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#f2f2f7",
   "theme_color": "#f2f2f7",
   "icons": [
     {
+      "src": "./icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
       "src": "./icon.png",
       "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "./icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

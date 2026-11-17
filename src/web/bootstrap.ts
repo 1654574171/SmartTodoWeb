@@ -83,19 +83,65 @@ function unsupported(feature: string): { ok: false; message: string } {
   return { ok: false, message };
 }
 
+type NavState = { smarttodoNav: 'home' | 'panel' };
+
 /**
- * 网页端没有原生返回键，浏览器的后退/手势返回默认会离开页面（表现为“直接退出”）。
- * 这里放一个 history 哨兵并接管 popstate：把返回导航转成 app:back，交给 App 统一处理。
- * App 内已有分层返回逻辑：编辑器 → 设置/日历/AI 面板 → 主界面，主界面才走 hideWindow。
+ * 网页端（尤其 iOS 添加到桌面的 PWA）的左滑返回处理。
+ *
+ * 关键点：绝不在首页额外 pushState 哨兵。过去那样做会让 history 里出现多条同 URL
+ * 记录，WKWebView 左滑退回时判定为跨文档导航 → 白屏重载。现在：
+ *   - 首页用 replaceState 标记，历史仍只有一条，左滑可正常退出回桌面；
+ *   - 仅在设置/日历/AI/编辑器打开时压入一条 panel 记录；
+ *   - 面板内左滑退回首页时转成 app:back，由 App 分层关闭面板，停在同一 document。
  */
 function initWebBackHandler(): void {
-  const sentinel = { smarttodoBack: true };
-  history.pushState(sentinel, '');
-  window.addEventListener('popstate', () => {
-    emit('app:back', null);
-    // 浏览器已弹出一条历史，立刻补回，保证返回始终停留在应用内、交给上面的分层逻辑。
-    history.pushState(sentinel, '');
+  const isNavState = (value: unknown): value is NavState => (
+    !!value && (value as NavState).smarttodoNav === 'home'
+    || !!value && (value as NavState).smarttodoNav === 'panel'
+  );
+
+  // 不新增历史条目，只给当前（首页）记录打标记。
+  history.replaceState({ smarttodoNav: 'home' }, '');
+
+  let panelOpen = false;
+  let ignoreNextPop = false;
+  let suppressOverlaySync = false;
+
+  window.addEventListener('popstate', (event) => {
+    if (ignoreNextPop) {
+      ignoreNextPop = false;
+      return;
+    }
+    const state: unknown = event.state;
+    // 从 panel 记录退回 home：面板内左滑 → 关闭面板，停在当前 document。
+    if (isNavState(state) && state.smarttodoNav === 'home' && panelOpen) {
+      suppressOverlaySync = true;
+      emit('app:back', null);
+      // 兜底：若这次返回未引起任何 overlay 变化，避免标志一直残留。
+      window.setTimeout(() => { suppressOverlaySync = false; }, 60);
+    }
+    // 其余情况（首页左滑、前进到 panel）不拦截，交给浏览器/系统处理。
   });
+
+  // 面板由 React 条件渲染，用 DOM 变化同步历史栈，避免改 App.tsx / api.ts。
+  const observer = new MutationObserver(() => {
+    const open = !!document.querySelector('.panel-overlay');
+    if (open === panelOpen) return;
+    panelOpen = open;
+    if (suppressOverlaySync) {
+      suppressOverlaySync = false;
+      return;
+    }
+    if (open) {
+      history.pushState({ smarttodoNav: 'panel' }, '');
+    } else if (isNavState(history.state) && (history.state as NavState).smarttodoNav === 'panel') {
+      // 面板由 UI（X / 遮罩 / 保存）关闭：同步弹掉 panel 记录，保持历史栈一致。
+      ignoreNextPop = true;
+      history.back();
+      window.setTimeout(() => { ignoreNextPop = false; }, 300);
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 export async function initWeb(): Promise<void> {

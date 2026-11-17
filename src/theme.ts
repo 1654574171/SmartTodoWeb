@@ -6,6 +6,11 @@ export function applyTheme(settings: Partial<Settings>) {
   const cardAlpha = 0.6 + 0.4 * opacity;
 
   root.dataset.theme = settings.theme || 'light';
+  // iOS PWA 状态栏跟随应用主题；深色用深色底，浅色恢复默认底色。
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) {
+    themeMeta.setAttribute('content', root.dataset.theme === 'dark' ? '#1c1c1e' : '#f2f2f7');
+  }
   root.style.setProperty('--accent', settings.accent || '#0071e3');
   root.style.setProperty('--panel-alpha', String(opacity));
   root.style.setProperty('--card-alpha', String(cardAlpha));
